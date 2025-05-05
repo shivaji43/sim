@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useOthers } from '@liveblocks/react/suspense'
 import { formatDistanceToNow } from 'date-fns'
 import {
   Bell,
@@ -55,6 +56,7 @@ import { DeploymentControls } from './components/deployment-controls/deployment-
 import { HistoryDropdownItem } from './components/history-dropdown-item/history-dropdown-item'
 import { MarketplaceModal } from './components/marketplace-modal/marketplace-modal'
 import { NotificationDropdownItem } from './components/notification-dropdown-item/notification-dropdown-item'
+import { UserAvatarStack } from './components/user-avatar-stack/user-avatar-stack'
 
 const logger = createLogger('ControlBar')
 
@@ -77,6 +79,9 @@ export function ControlBar() {
   const router = useRouter()
   const { data: session } = useSession()
   const { isCollapsed: isSidebarCollapsed } = useSidebarStore()
+  const others = useOthers()
+
+  logger.info('others', { others })
 
   // Store hooks
   const {
@@ -608,33 +613,38 @@ export function ControlBar() {
    * Render workflow name section (editable/non-editable)
    */
   const renderWorkflowName = () => (
-    <div className="flex flex-col gap-[2px]">
-      {isEditing ? (
-        <input
-          type="text"
-          value={editedName}
-          onChange={(e) => setEditedName(e.target.value)}
-          onBlur={handleNameSubmit}
-          onKeyDown={handleNameKeyDown}
-          autoFocus
-          className="text-sm font-medium bg-transparent border-none outline-none p-0 w-[200px]"
-        />
-      ) : (
-        <h2
-          className="text-sm font-medium hover:text-muted-foreground w-fit cursor-pointer"
-          onClick={handleNameClick}
-        >
-          {activeWorkflowId ? workflows[activeWorkflowId]?.name : 'Workflow'}
-        </h2>
-      )}
-      {mounted && (
-        <p className="text-xs text-muted-foreground">
-          Saved{' '}
-          {formatDistanceToNow(lastSaved || Date.now(), {
-            addSuffix: true,
-          })}
-        </p>
-      )}
+    <div className="flex items-center">
+      <div className="flex flex-col">
+        <div className="flex items-center">
+          {isEditing ? (
+            <input
+              type="text"
+              value={editedName}
+              onChange={(e) => setEditedName(e.target.value)}
+              onBlur={handleNameSubmit}
+              onKeyDown={handleNameKeyDown}
+              autoFocus
+              className="text-sm font-medium bg-transparent border-none outline-none p-0 w-[200px]"
+            />
+          ) : (
+            <h2
+              className="text-sm font-medium hover:text-muted-foreground w-fit cursor-pointer"
+              onClick={handleNameClick}
+            >
+              {activeWorkflowId ? workflows[activeWorkflowId]?.name : 'Workflow'}
+            </h2>
+          )}
+          <UserAvatarStack />
+        </div>
+        {mounted && (
+          <p className="text-xs text-muted-foreground pt-[1px]">
+            Saved{' '}
+            {formatDistanceToNow(lastSaved || Date.now(), {
+              addSuffix: true,
+            })}
+          </p>
+        )}
+      </div>
     </div>
   )
 
@@ -1131,7 +1141,7 @@ export function ControlBar() {
       {/* Left Section - Workflow Info */}
       <div className="pl-4">{renderWorkflowName()}</div>
 
-      {/* Middle Section - Reserved for future use */}
+      {/* Middle Section - Empty */}
       <div className="flex-1" />
 
       {/* Right Section - Actions */}

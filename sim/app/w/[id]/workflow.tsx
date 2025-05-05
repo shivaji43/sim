@@ -33,6 +33,7 @@ import { WorkflowEdge } from './components/workflow-edge/workflow-edge'
 import { LoopInput } from './components/workflow-loop/components/loop-input/loop-input'
 import { LoopLabel } from './components/workflow-loop/components/loop-label/loop-label'
 import { createLoopNode, getRelativeLoopPosition } from './components/workflow-loop/workflow-loop'
+import { Room } from './room'
 
 const logger = createLogger('Workflow')
 
@@ -533,10 +534,12 @@ function WorkflowContent() {
 // Workflow wrapper
 export default function Workflow() {
   return (
-    <ReactFlowProvider>
-      <ErrorBoundary>
-        <WorkflowContent />
-      </ErrorBoundary>
-    </ReactFlowProvider>
+    <Room>
+      <ReactFlowProvider>
+        <ErrorBoundary>
+          <WorkflowContent />
+        </ErrorBoundary>
+      </ReactFlowProvider>
+    </Room>
   )
 }
