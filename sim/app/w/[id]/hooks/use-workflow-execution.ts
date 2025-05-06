@@ -39,11 +39,28 @@ export function useWorkflowExecution() {
     setExecutor,
     setDebugContext,
     setActiveBlocks,
+    setIsCancellationRequested,
   } = useExecutionStore()
   const [executionResult, setExecutionResult] = useState<ExecutionResult | null>(null)
 
   const persistLogs = async (executionId: string, result: ExecutionResult, streamContent?: string) => {
     try {
+      // Final cancellation check - don't persist logs at all if cancellation was requested
+      if (useExecutionStore.getState().isCancellationRequested) {
+        logger.info('Skipping log persistence due to cancellation request');
+        return executionId;
+      }
+
+      // Don't persist if output is marked as cancelled
+      if ((result.output && 
+           typeof result.output === 'object' && 
+           result.output.cancelled === true) || 
+          result.error === 'Execution cancelled' ||
+          (result.metadata && result.metadata.cancelled === true)) {
+        logger.info('Skipping log persistence for cancelled execution');
+        return executionId;
+      }
+
       // Build trace spans from execution logs
       const { traceSpans, totalDuration } = buildTraceSpans(result)
 
@@ -98,6 +115,9 @@ export function useWorkflowExecution() {
 
   const handleRunWorkflow = useCallback(async (workflowInput?: any) => {
     if (!activeWorkflowId) return
+
+    // Clear previous cancellation flag at the very beginning
+    setIsCancellationRequested(false)
 
     // Reset execution result and set execution state
     setExecutionResult(null)
@@ -208,9 +228,35 @@ export function useWorkflowExecution() {
       // Execute workflow
       const result = await newExecutor.execute(activeWorkflowId)
 
+      // Check for cancellation after execution completes
+      // If cancelled during execution, don't proceed with normal flow
+      if (useExecutionStore.getState().isCancellationRequested) {
+        logger.info('Execution was cancelled - skipping normal completion flow')
+        
+        // Reset execution state to ensure UI is updated
+        setIsExecuting(false)
+        
+        // Return cancelled result to prevent further processing
+        return {
+          success: false,
+          output: { response: {}, cancelled: true },
+          error: 'Execution cancelled',
+        }
+      }
+      
       // Streaming results are handled differently - they won't have a standard result
       if (result instanceof ReadableStream) {
         logger.info('Received streaming result from executor')
+        
+        // Check if we've already cancelled before returning
+        if (useExecutionStore.getState().isCancellationRequested) {
+          logger.info('Streaming execution cancelled - aborting stream')
+          return {
+            success: false,
+            error: 'Execution cancelled',
+            output: { response: {} },
+          }
+        }
         
         // For streaming results, we need to handle them in the component
         // that initiated the execution (chat panel)
@@ -223,6 +269,16 @@ export function useWorkflowExecution() {
       // Handle StreamingExecution format (combined stream + execution result)
       if (result && typeof result === 'object' && 'stream' in result && 'execution' in result) {
         logger.info('Received combined stream+execution result from executor')
+        
+        // Check if we've already cancelled
+        if (useExecutionStore.getState().isCancellationRequested) {
+          logger.info('Combined streaming execution cancelled - aborting')
+          return {
+            success: false,
+            error: 'Execution cancelled',
+            output: { response: {} },
+          }
+        }
         
         // Generate an executionId and store it in the execution metadata so that
         // the chat component can persist the logs *after* the stream finishes.
@@ -311,20 +367,48 @@ export function useWorkflowExecution() {
           setActiveBlocks(new Set())
         }
 
-        // Show notification
-        addNotification(
-          result.success ? 'console' : 'error',
-          result.success
-            ? 'Workflow completed successfully'
-            : `Workflow execution failed: ${result.error}`,
-          activeWorkflowId
-        )
+        // Show notification only for success or non-cancellation errors
+        if (result.success || result.error !== 'Execution cancelled') {
+          // For successful runs, make sure it wasn't cancelled before showing success notification
+          const wasCancelled = 
+            // Check execution state directly
+            useExecutionStore.getState().isCancellationRequested ||
+            // Check output object
+            (result.output && 
+             typeof result.output === 'object' && 
+             (('cancelled' in result.output && result.output.cancelled === true) ||
+              (result.metadata && result.metadata.cancelled === true)));
 
-        // In non-debug mode, persist logs (no need to wait for this)
-        // We explicitly don't await this to avoid blocking UI updates
-        persistLogs(executionId, result).catch((err) => {
-          logger.error('Error persisting logs:', { error: err })
-        })
+          if (result.success && !wasCancelled) {
+            addNotification(
+              'console',
+              'Workflow completed successfully',
+              activeWorkflowId
+            );
+          } else if (!result.success) {
+            addNotification(
+              'error',
+              `Workflow execution failed: ${result.error}`,
+              activeWorkflowId
+            );
+          }
+        }
+
+        // Persist logs unless the execution was cancelled
+        if (!useExecutionStore.getState().isCancellationRequested) {
+          // Skip persisting logs if output is marked as cancelled by executor
+          const outputCancelled = 
+            result.output && 
+            typeof result.output === 'object' && 
+            'cancelled' in result.output && 
+            result.output.cancelled === true;
+          
+          if (!outputCancelled) {
+            persistLogs(executionId, result).catch((err) => {
+              logger.error('Error persisting logs:', { error: err })
+            })
+          }
+        }
       }
 
       return result
@@ -384,38 +468,52 @@ export function useWorkflowExecution() {
       setIsDebugging(false)
       setActiveBlocks(new Set())
 
-      // Create a more user-friendly notification message
-      let notificationMessage = `Workflow execution failed`
+      // Only show error notification if it's not a cancellation
+      if (errorMessage !== 'Execution cancelled') {
+        // Create a more user-friendly notification message
+        let notificationMessage = `Workflow execution failed`
 
-      // Add URL for HTTP errors
-      if (error && error.request && error.request.url) {
-        // Don't show empty URL errors
-        if (error.request.url && error.request.url.trim() !== '') {
-          notificationMessage += `: Request to ${error.request.url} failed`
+        // Add URL for HTTP errors
+        if (error && error.request && error.request.url) {
+          // Don't show empty URL errors
+          if (error.request.url && error.request.url.trim() !== '') {
+            notificationMessage += `: Request to ${error.request.url} failed`
 
-          // Add status if available
-          if (error.status) {
-            notificationMessage += ` (Status: ${error.status})`
+            // Add status if available
+            if (error.status) {
+              notificationMessage += ` (Status: ${error.status})`
+            }
           }
+        } else {
+          // Regular errors
+          notificationMessage += `: ${errorMessage}`
         }
-      } else {
-        // Regular errors
-        notificationMessage += `: ${errorMessage}`
+
+        // Safely show error notification
+        try {
+          addNotification('error', notificationMessage, activeWorkflowId)
+        } catch (notificationError) {
+          logger.error('Error showing error notification:', notificationError)
+          // Fallback console error
+          console.error('Workflow execution failed:', errorMessage)
+        }
       }
 
-      // Safely show error notification
-      try {
-        addNotification('error', notificationMessage, activeWorkflowId)
-      } catch (notificationError) {
-        logger.error('Error showing error notification:', notificationError)
-        // Fallback console error
-        console.error('Workflow execution failed:', errorMessage)
+      // Avoid persisting logs if we cancelled
+      if (!useExecutionStore.getState().isCancellationRequested) {
+        // Skip persisting logs if output is marked as cancelled by executor
+        const outputCancelled = 
+          errorResult.output && 
+          typeof errorResult.output === 'object' && 
+          'cancelled' in errorResult.output && 
+          errorResult.output.cancelled === true;
+          
+        if (!outputCancelled) {
+          persistLogs(executionId, errorResult).catch((err) => {
+            logger.error('Error persisting logs:', { error: err })
+          })
+        }
       }
-
-      // Also send the error result to the API (don't await to keep UI responsive)
-      persistLogs(executionId, errorResult).catch((err) => {
-        logger.error('Error persisting logs:', { error: err })
-      })
 
       return errorResult
     }
@@ -441,6 +539,22 @@ export function useWorkflowExecution() {
    * Handles stepping through workflow execution in debug mode
    */
   const handleStepDebug = useCallback(async () => {
+    // Check if cancellation is requested and abort
+    if (useExecutionStore.getState().isCancellationRequested) {
+      logger.info('Debug step cancelled')
+      // Reset state to avoid UI confusion
+      setIsDebugging(false)
+      setIsExecuting(false)
+      setActiveBlocks(new Set())
+      
+      // If we have a debug context with workflowId, mark its execution as cancelled
+      if (debugContext?.workflowId) {
+        useExecutionStore.getState().addCancelledExecutionId(debugContext.workflowId)
+      }
+      
+      return
+    }
+
     // Log debug information
     logger.info('Step Debug requested', {
       hasExecutor: !!executor,
@@ -511,6 +625,11 @@ export function useWorkflowExecution() {
         setExecutor(null)
         setPendingBlocks([])
         setActiveBlocks(new Set())
+        
+        // Reset cancellation flag after a short delay
+        setTimeout(() => {
+          setIsCancellationRequested(false)
+        }, 500)
       } else {
         // Debug session continues - update UI with new pending blocks
         logger.info('Debug step completed, next blocks pending', {
@@ -553,6 +672,11 @@ export function useWorkflowExecution() {
       setExecutor(null)
       setPendingBlocks([])
       setActiveBlocks(new Set())
+      
+      // Reset cancellation flag after a short delay
+      setTimeout(() => {
+        setIsCancellationRequested(false)
+      }, 500)
     }
   }, [
     executor,
@@ -572,6 +696,16 @@ export function useWorkflowExecution() {
    * Handles resuming execution in debug mode until completion
    */
   const handleResumeDebug = useCallback(async () => {
+    // Check if cancellation is requested and abort
+    if (useExecutionStore.getState().isCancellationRequested) {
+      logger.info('Debug resume cancelled')
+      // Reset state to avoid UI confusion
+      setIsDebugging(false)
+      setIsExecuting(false)
+      setActiveBlocks(new Set())
+      return
+    }
+
     // Log debug information
     logger.info('Resume Debug requested', {
       hasExecutor: !!executor,
@@ -681,13 +815,29 @@ export function useWorkflowExecution() {
 
       // Show completion notification
       try {
-        addNotification(
-          currentResult.success ? 'console' : 'error',
-          currentResult.success
-            ? 'Workflow completed successfully'
-            : `Workflow execution failed: ${currentResult.error}`,
-          activeWorkflowId || ''
-        )
+        // For successful runs, make sure it wasn't cancelled before showing success notification
+        const wasCancelled = 
+          // Check execution state directly
+          useExecutionStore.getState().isCancellationRequested ||
+          // Check output object
+          (currentResult.output && 
+           typeof currentResult.output === 'object' && 
+           (('cancelled' in currentResult.output && currentResult.output.cancelled === true) ||
+           (currentResult.metadata && currentResult.metadata.cancelled === true)));
+
+        if (currentResult.success && !wasCancelled) {
+          addNotification(
+            'console',
+            'Workflow completed successfully',
+            activeWorkflowId || ''
+          );
+        } else if (!currentResult.success) {
+          addNotification(
+            'error',
+            `Workflow execution failed: ${currentResult.error}`,
+            activeWorkflowId || ''
+          );
+        }
       } catch (notificationError) {
         logger.error('Error showing completion notification:', notificationError)
         console.info('Workflow execution completed')
@@ -703,6 +853,11 @@ export function useWorkflowExecution() {
       setExecutor(null)
       setPendingBlocks([])
       setActiveBlocks(new Set())
+      
+      // Reset cancellation flag after a short delay
+      setTimeout(() => {
+        setIsCancellationRequested(false)
+      }, 500)
     } catch (error: any) {
       logger.error('Debug Resume Error:', error)
 
@@ -736,6 +891,11 @@ export function useWorkflowExecution() {
       setExecutor(null)
       setPendingBlocks([])
       setActiveBlocks(new Set())
+      
+      // Reset cancellation flag after a short delay
+      setTimeout(() => {
+        setIsCancellationRequested(false)
+      }, 500)
     }
   }, [
     executor,
@@ -755,12 +915,25 @@ export function useWorkflowExecution() {
    * Handles cancelling the current debugging session
    */
   const handleCancelDebug = useCallback(() => {
+    // Set cancellation flag first
+    setIsCancellationRequested(true)
+    
+    // Mark current workflow execution as cancelled so we won't see stale entries
+    if (activeWorkflowId) {
+      useExecutionStore.getState().addCancelledExecutionId(activeWorkflowId);
+    }
+    
     setIsExecuting(false)
     setIsDebugging(false)
     setDebugContext(null)
     setExecutor(null)
     setPendingBlocks([])
     setActiveBlocks(new Set())
+    
+    // Reset cancellation flag after a short delay
+    setTimeout(() => {
+      setIsCancellationRequested(false)
+    }, 500)
   }, [
     setIsExecuting,
     setIsDebugging,
@@ -768,6 +941,8 @@ export function useWorkflowExecution() {
     setExecutor,
     setPendingBlocks,
     setActiveBlocks,
+    setIsCancellationRequested,
+    activeWorkflowId,
   ])
 
   return {

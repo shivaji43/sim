@@ -149,6 +149,17 @@ export class Executor {
     const startTime = new Date()
     let finalOutput: NormalizedBlockOutput = { response: {} }
 
+    // Early check for cancellation before we even start
+    const { isCancellationRequested: cancelledEarly } = useExecutionStore.getState()
+    if (cancelledEarly) {
+      return {
+        success: false,
+        output: { response: {} },
+        error: 'Execution cancelled',
+        logs: [],
+      }
+    }
+
     // Track workflow execution start
     trackWorkflowTelemetry('workflow_execution_started', {
       workflowId,
@@ -173,6 +184,24 @@ export class Executor {
       const maxIterations = 100 // Safety limit for infinite loops
 
       while (hasMoreLayers && iteration < maxIterations) {
+        // Check for cancellation on every loop iteration
+        if (useExecutionStore.getState().isCancellationRequested) {
+          logger.info('Execution cancelled by user')
+          trackWorkflowTelemetry('workflow_execution_cancelled', {
+            workflowId,
+            executedBlockCount: context.executedBlocks.size,
+            cancelledAtIteration: iteration,
+          })
+
+          // Return without persisting or finalising
+          return {
+            success: false,
+            output: finalOutput,
+            error: 'Execution cancelled',
+            logs: context.blockLogs,
+          }
+        }
+
         const nextLayer = this.getNextExecutionLayer(context)
 
         if (this.isDebugging) {
@@ -240,6 +269,7 @@ export class Executor {
                   startedAt: blockLog?.startedAt || executionData.metadata?.startTime || new Date().toISOString(),
                   endedAt: blockLog?.endedAt || executionData.metadata?.endTime || new Date().toISOString(),
                   workflowId: context.workflowId,
+                  executionId: context.workflowId, // Add execution ID to track which run this belongs to
                   timestamp: blockLog?.startedAt || executionData.metadata?.startTime || new Date().toISOString(),
                   blockId: executionData.blockId,
                   blockName: executionData.blockName || blockLog?.blockName || 'Agent Block',
@@ -395,8 +425,32 @@ export class Executor {
         success: true
       })
 
+      // Final cancellation check before returning success result
+      if (useExecutionStore.getState().isCancellationRequested) {
+        logger.info('Execution was cancelled - marking final result accordingly')
+        return {
+          success: false,
+          output: { response: {}, cancelled: true },
+          error: 'Execution cancelled',
+          logs: context.blockLogs,
+          metadata: {
+            duration: duration,
+            startTime: context.metadata.startTime!,
+            endTime: context.metadata.endTime!,
+            cancelled: true
+          },
+        }
+      }
+
+      // One more cancellation check - mark finalOutput as cancelled if cancellation was requested earlier
+      if (finalOutput && typeof finalOutput === 'object') {
+        if (useExecutionStore.getState().isCancellationRequested) {
+          finalOutput.cancelled = true;
+        }
+      }
+
       return {
-        success: true,
+        success: useExecutionStore.getState().isCancellationRequested ? false : true,
         output: finalOutput,
         metadata: {
           duration: duration,
@@ -406,6 +460,7 @@ export class Executor {
             source: conn.source,
             target: conn.target,
           })),
+          ...(useExecutionStore.getState().isCancellationRequested ? { cancelled: true } : {})
         },
         logs: context.blockLogs,
       }
@@ -442,6 +497,16 @@ export class Executor {
    * @returns Updated execution result
    */
   async continueExecution(blockIds: string[], context: ExecutionContext): Promise<ExecutionResult> {
+    if (useExecutionStore.getState().isCancellationRequested) {
+      logger.info('Execution cancelled before debug step started')
+      return {
+        success: false,
+        output: { response: {} },
+        error: 'Execution cancelled',
+        logs: context.blockLogs,
+      }
+    }
+
     const { setPendingBlocks } = useExecutionStore.getState()
     let finalOutput: NormalizedBlockOutput = { response: {} }
 
@@ -452,6 +517,18 @@ export class Executor {
       if (outputs.length > 0) {
         finalOutput = outputs[outputs.length - 1]
       }
+
+      // Check cancellation again after layer execution
+      if (useExecutionStore.getState().isCancellationRequested) {
+        logger.info('Execution cancelled during debug step')
+        return {
+          success: false,
+          output: { response: {} },
+          error: 'Execution cancelled',
+          logs: context.blockLogs,
+        }
+      }
+
       await this.loopManager.processLoopIterations(context)
       const nextLayer = this.getNextExecutionLayer(context)
       setPendingBlocks(nextLayer)
@@ -464,7 +541,7 @@ export class Executor {
         context.metadata.endTime = endTime.toISOString()
 
         return {
-          success: true,
+          success: useExecutionStore.getState().isCancellationRequested ? false : true,
           output: finalOutput,
           metadata: {
             duration: endTime.getTime() - new Date(context.metadata.startTime!).getTime(),
@@ -476,6 +553,7 @@ export class Executor {
               source: conn.source,
               target: conn.target,
             })),
+            ...(useExecutionStore.getState().isCancellationRequested ? { cancelled: true } : {})
           },
           logs: context.blockLogs,
         }
@@ -908,6 +986,18 @@ export class Executor {
     try {
       // Set all blocks in this layer as active
       useExecutionStore.setState({ activeBlockIds: new Set(blockIds) })
+      
+      // Check for cancellation before starting block executions
+      if (useExecutionStore.getState().isCancellationRequested) {
+        logger.info('Layer execution cancelled before starting blocks')
+        // Remove active block highlights and return empty result
+        useExecutionStore.setState({ activeBlockIds: new Set() })
+        return [{
+          response: {},
+          error: 'Execution cancelled',
+          cancelled: true
+        }]
+      }
 
       const results = await Promise.all(
         blockIds.map((blockId) => this.executeBlock(blockId, context))
@@ -939,6 +1029,15 @@ export class Executor {
     blockId: string,
     context: ExecutionContext
   ): Promise<NormalizedBlockOutput> {
+    // Check for cancellation at the start of any block execution
+    if (useExecutionStore.getState().isCancellationRequested) {
+      logger.info(`Block execution cancelled for block ${blockId}`)
+      return {
+        response: {},
+        error: 'Execution cancelled',
+      }
+    }
+    
     const block = this.actualWorkflow.blocks.find((b) => b.id === blockId)
     if (!block) {
       throw new Error(`Block ${blockId} not found`)
@@ -1016,6 +1115,18 @@ export class Executor {
         executionTime,
       })
 
+      // Check for cancellation again after setting block state
+      if (useExecutionStore.getState().isCancellationRequested) {
+        logger.info(`Execution cancelled after block ${blockId} completed`)
+        // Still return the output but mark execution as aborted for downstream handling
+        if (output && typeof output === 'object') {
+          // Mark as cancelled to prevent persistence
+          output.cancelled = true;
+          // Also add an error message to clearly indicate cancellation
+          output.error = 'Execution cancelled';
+        }
+      }
+      
       // Update the execution log
       blockLog.success = true
       blockLog.output = output
@@ -1023,16 +1134,21 @@ export class Executor {
       blockLog.endedAt = new Date().toISOString()
 
       context.blockLogs.push(blockLog)
-      addConsole({
-        output: blockLog.output,
-        durationMs: blockLog.durationMs,
-        startedAt: blockLog.startedAt,
-        endedAt: blockLog.endedAt,
-        workflowId: context.workflowId,
-        blockId: block.id,
-        blockName: block.metadata?.name || 'Unnamed Block',
-        blockType: block.metadata?.id || 'unknown',
-      })
+      
+      // Skip adding to console if execution was cancelled
+      if (!useExecutionStore.getState().isCancellationRequested) {
+        addConsole({
+          output: blockLog.output,
+          durationMs: blockLog.durationMs,
+          startedAt: blockLog.startedAt,
+          endedAt: blockLog.endedAt,
+          workflowId: context.workflowId,
+          executionId: context.workflowId, // Add execution ID to track which run this belongs to
+          blockId: block.id,
+          blockName: block.metadata?.name || 'Unnamed Block',
+          blockType: block.metadata?.id || 'unknown',
+        })
+      }
 
       trackWorkflowTelemetry('block_execution', {
         workflowId: context.workflowId,
@@ -1062,18 +1178,23 @@ export class Executor {
 
       // Log the error even if we'll continue execution through error path
       context.blockLogs.push(blockLog)
-      addConsole({
-        output: {},
-        error:
-          error.message ||
-          `Error executing ${block.metadata?.id || 'unknown'} block: ${String(error)}`,
-        durationMs: blockLog.durationMs,
-        startedAt: blockLog.startedAt,
-        endedAt: blockLog.endedAt,
-        workflowId: context.workflowId,
-        blockName: block.metadata?.name || 'Unnamed Block',
-        blockType: block.metadata?.id || 'unknown',
-      })
+      
+      // Skip adding to console if execution was cancelled 
+      if (!useExecutionStore.getState().isCancellationRequested) {
+        addConsole({
+          output: {},
+          error:
+            error.message ||
+            `Error executing ${block.metadata?.id || 'unknown'} block: ${String(error)}`,
+          durationMs: blockLog.durationMs,
+          startedAt: blockLog.startedAt,
+          endedAt: blockLog.endedAt,
+          workflowId: context.workflowId,
+          executionId: context.workflowId, // Add execution ID to track which run this belongs to
+          blockName: block.metadata?.name || 'Unnamed Block',
+          blockType: block.metadata?.id || 'unknown',
+        })
+      }
 
       // Check for error connections and follow them if they exist
       const hasErrorPath = this.activateErrorPath(blockId, context)
@@ -1188,15 +1309,23 @@ export class Executor {
       }
     }
 
+    // Check if execution has been cancelled
+    const isCancelled = useExecutionStore.getState().isCancellationRequested;
+
     if (output && typeof output === 'object' && 'response' in output) {
       // If response already contains an error, maintain it
       if (output.response && output.response.error) {
         return {
           ...output,
           error: output.response.error,
+          // Add cancelled flag if cancellation was requested
+          ...(isCancelled ? { cancelled: true } : {})
         }
       }
-      return output as NormalizedBlockOutput
+      return {
+        ...output,
+        ...(isCancelled ? { cancelled: true } : {})
+      } as NormalizedBlockOutput
     }
 
     const blockType = block.metadata?.id

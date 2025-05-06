@@ -11,12 +11,13 @@ export interface ConsoleEntry {
   blockName?: string
   blockType?: string
   blockId?: string
+  executionId?: string
 }
 
 export interface ConsoleStore {
   entries: ConsoleEntry[]
   isOpen: boolean
-  addConsole: (entry: Omit<ConsoleEntry, 'id' | 'timestamp'>) => ConsoleEntry
+  addConsole: (entry: Omit<ConsoleEntry, 'id' | 'timestamp'>) => ConsoleEntry | null
   clearConsole: (workflowId: string | null) => void
   getWorkflowEntries: (workflowId: string) => ConsoleEntry[]
   toggleConsole: () => void

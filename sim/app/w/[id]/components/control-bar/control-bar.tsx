@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import {
@@ -43,6 +43,7 @@ import { createLogger } from '@/lib/logs/console-logger'
 import { cn } from '@/lib/utils'
 import { useExecutionStore } from '@/stores/execution/store'
 import { useNotificationStore } from '@/stores/notifications/store'
+import { useConsoleStore } from '@/stores/panel/console/store'
 import { usePanelStore } from '@/stores/panel/store'
 import { useGeneralStore } from '@/stores/settings/general/store'
 import { useSidebarStore } from '@/stores/sidebar/store'
@@ -90,7 +91,8 @@ export function ControlBar() {
     useWorkflowStore()
   const { workflows, updateWorkflow, activeWorkflowId, removeWorkflow, duplicateWorkflow } =
     useWorkflowRegistry()
-  const { isExecuting, handleRunWorkflow } = useWorkflowExecution()
+  const { isExecuting, handleRunWorkflow } =
+    useWorkflowExecution()
   const { setActiveTab } = usePanelStore()
 
   // Debug mode state
@@ -135,6 +137,9 @@ export function ControlBar() {
     currentUsage: number
     limit: number
   } | null>(null)
+
+  // Access cancellation setter from execution store
+  const { setIsCancellationRequested } = useExecutionStore()
 
   // Register keyboard shortcut for running workflow
   useKeyboardShortcuts(
@@ -562,6 +567,7 @@ export function ControlBar() {
     } finally {
       // Always immediately update UI state
       setIsMultiRunning(false)
+      setCompletedRuns(0)
 
       // Handle progress bar visibility
       if (runCount > 1) {
@@ -574,12 +580,18 @@ export function ControlBar() {
 
       setIsCancelling(false)
       cancelFlagRef.current = false
+      setIsCancellationRequested(false)
 
       // Show notification after state is updated
       if (wasCancelled) {
-        addNotification('info', 'Workflow run cancelled', activeWorkflowId)
+        addNotification('info', 'Workflow execution cancelled', activeWorkflowId)
       } else if (workflowError) {
-        addNotification('error', 'Failed to complete all workflow runs', activeWorkflowId)
+        // Don't show notification if it's a cancellation error
+        // We need to stringify to avoid type errors with TypeScript
+        const errorStr = String(workflowError);
+        if (!errorStr.includes('Execution cancelled')) {
+          addNotification('error', 'Failed to complete all workflow runs', activeWorkflowId)
+        }
       } else {
         // Success notification for batch runs
         if (runCount > 1) {
@@ -804,37 +816,33 @@ export function ControlBar() {
   /**
    * Render publish button
    */
-  const renderPublishButton = () => {
-    const isPublished = isPublishedToMarketplace()
-
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handlePublishWorkflow}
-            disabled={isPublishing}
-            className={cn('hover:text-[#802FFF]', isPublished && 'text-[#802FFF]')}
-          >
-            {isPublishing ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Store className="h-5 w-5" />
-            )}
-            <span className="sr-only">Publish to Marketplace</span>
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          {isPublishing
-            ? 'Publishing...'
-            : isPublished
-              ? 'Published to Marketplace'
-              : 'Publish to Marketplace'}
-        </TooltipContent>
-      </Tooltip>
-    )
-  }
+  const renderPublishButton = () => (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handlePublishWorkflow}
+          disabled={isPublishing}
+          className={cn('hover:text-[#802FFF]', isPublishedToMarketplace() && 'text-[#802FFF]')}
+        >
+          {isPublishing ? (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          ) : (
+            <Store className="h-5 w-5" />
+          )}
+          <span className="sr-only">Publish to Marketplace</span>
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        {isPublishing
+          ? 'Publishing...'
+          : isPublishedToMarketplace()
+            ? 'Published to Marketplace'
+            : 'Publish to Marketplace'}
+      </TooltipContent>
+    </Tooltip>
+  )
 
   /**
    * Render workflow duplicate button
@@ -956,7 +964,7 @@ export function ControlBar() {
   }
 
   // Helper function to open subscription settings
-  const openSubscriptionSettings = () => {
+  function openSubscriptionSettings() {
     // Dispatch custom event to open settings modal with subscription tab
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
@@ -1108,9 +1116,35 @@ export function ControlBar() {
                 variant="outline"
                 size="icon"
                 onClick={() => {
-                  logger.info('Cancel button clicked - setting ref and state')
+                  logger.info('Cancel button clicked - setting cancellation flag in store')
                   cancelFlagRef.current = true
                   setIsCancelling(true)
+                  // Notify executor to cancel current run
+                  setIsCancellationRequested(true)
+                  
+                  // Mark this execution as cancelled so delayed entries won't appear
+                  if (activeWorkflowId) {
+                    useExecutionStore.getState().addCancelledExecutionId(activeWorkflowId)
+                  }
+                  
+                  // Immediately clear active blocks visualization
+                  useExecutionStore.getState().setActiveBlocks(new Set())
+                  // Immediately reset execution state for UI update
+                  useExecutionStore.getState().setIsExecuting(false)
+                  // Reset multi-running state to prevent "(0/1)" text
+                  setIsMultiRunning(false)
+                  setCompletedRuns(0)
+                  // Quickly transition to "Cancelled" state after a short delay
+                  setTimeout(() => {
+                    setIsCancelling(false)
+                    // Show a notification that cancellation was successful
+                    addNotification('info', 'Workflow execution cancelled', activeWorkflowId)
+                    
+                    // Reset cancellation flag after a short delay
+                    setTimeout(() => {
+                      setIsCancellationRequested(false)
+                    }, 200)
+                  }, 500)
                 }}
                 disabled={isCancelling}
                 className="ml-2 h-10 w-10"

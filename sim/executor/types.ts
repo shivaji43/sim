@@ -35,6 +35,7 @@ export interface NormalizedBlockOutput {
     error?: string // Error message if block execution failed
   }
   error?: string // Top-level error field for easy error checking
+  cancelled?: boolean // Indicates if execution was cancelled
   [key: string]: any // Additional properties
 }
 
@@ -64,6 +65,7 @@ export interface ExecutionMetadata {
   isDebugSession?: boolean // Whether the workflow is running in debug mode
   context?: ExecutionContext // Runtime context for the workflow
   workflowConnections?: Array<{ source: string; target: string }> // Connections between workflow blocks
+  cancelled?: boolean // Indicates whether the execution was cancelled
 }
 
 /**

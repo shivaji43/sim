@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { devtools, persist } from 'zustand/middleware'
 import { ConsoleEntry, ConsoleStore } from './types'
 import { useChatStore } from '../chat/store'
+import { useExecutionStore } from '@/stores/execution/store'
 
 // MAX across all workflows
 const MAX_ENTRIES = 50
@@ -71,6 +72,15 @@ export const useConsoleStore = create<ConsoleStore>()(
 
         addConsole: (entry: Omit<ConsoleEntry, 'id' | 'timestamp'>) => {
           set((state) => {
+            if (useExecutionStore.getState().isCancellationRequested) {
+              return { entries: state.entries }
+            }
+            
+            // Check if this entry belongs to a cancelled execution
+            if (entry.executionId && useExecutionStore.getState().isExecutionCancelled(entry.executionId)) {
+              return { entries: state.entries }
+            }
+            
             // Determine early if this entry represents a streaming output
             const isStreamingOutput =
               (typeof ReadableStream !== 'undefined' && entry.output instanceof ReadableStream) ||
