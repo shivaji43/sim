@@ -206,13 +206,17 @@ export function Sidebar() {
       </div>
 
       {/* Main navigation - Fixed at top below header */}
-      {/* <div className="flex-shrink-0 px-2 pt-0">
+      <div className="flex-shrink-0 px-2">
         <NavSection isLoading={isLoading} itemCount={2} isCollapsed={isCollapsed}>
           <NavSection.Item
             icon={<Home className="h-[18px] w-[18px]" />}
-            href="/w/1"
+            href={activeWorkspaceId ? `/w/home/${activeWorkspaceId}` : '/w/home'}
             label="Home"
-            active={pathname === '/w/1'}
+            active={
+              pathname === `/w/home/${activeWorkspaceId}` ||
+              pathname === '/w/home' ||
+              pathname === `/w/${activeWorkspaceId}`
+            }
             isCollapsed={isCollapsed}
           />
           <NavSection.Item
@@ -222,18 +226,11 @@ export function Sidebar() {
             active={pathname === '/w/templates'}
             isCollapsed={isCollapsed}
           />
-          <NavSection.Item
-            icon={<Store className="h-[18px] w-[18px]" />}
-            href="/w/marketplace"
-            label="Marketplace"
-            active={pathname === '/w/marketplace'}
-            isCollapsed={isCollapsed}
-          />
         </NavSection>
-      </div> */}
+      </div>
 
       {/* Scrollable Content Area - Contains Workflows and Logs/Settings */}
-      <div className="flex-1 overflow-auto scrollbar-none flex flex-col px-2 py-0">
+      <div className="flex-1 overflow-auto scrollbar-none flex flex-col px-2 mt-6">
         {/* Workflows Section */}
         <div className="flex-shrink-0">
           <h2

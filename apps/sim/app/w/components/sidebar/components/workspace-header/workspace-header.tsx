@@ -319,8 +319,8 @@ export function WorkspaceHeader({
     // Update the workflow registry store with the new active workspace
     setActiveWorkspaceId(workspace.id)
 
-    // Update URL to include workspace ID
-    router.push(`/w/${workspace.id}`)
+    // Update URL to workspace home page with the clear path structure
+    router.push(`/w/home/${workspace.id}`)
   }
 
   const handleCreateWorkspace = (name: string) => {
@@ -446,7 +446,7 @@ export function WorkspaceHeader({
   }
 
   // Determine URL for workspace links
-  const workspaceUrl = activeWorkspace ? `/w/${activeWorkspace.id}` : '/w'
+  const workspaceUrl = activeWorkspace ? `/w/home/${activeWorkspace.id}` : '/w/home'
 
   // Notify parent component when dropdown opens/closes
   const handleDropdownOpenChange = (open: boolean) => {

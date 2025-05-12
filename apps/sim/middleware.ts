@@ -51,7 +51,14 @@ export async function middleware(request: NextRequest) {
 
   // Check if the path is exactly /w
   if (url.pathname === '/w') {
-    return NextResponse.redirect(new URL('/w/1', request.url))
+    // If user has an active workspace in cookies, redirect there
+    const activeWorkspaceId = request.cookies.get('active-workspace-id')?.value
+    if (activeWorkspaceId) {
+      return NextResponse.redirect(new URL(`/w/home/${activeWorkspaceId}`, request.url))
+    }
+    
+    // Otherwise default to /w/home which will handle workspace selection
+    return NextResponse.redirect(new URL('/w/home', request.url))
   }
 
   // Allow access to invitation links
