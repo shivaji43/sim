@@ -55,11 +55,9 @@ export function getScheduleTimeValues(starterBlock: BlockState): {
   scheduleStartAt?: string
   minutesInterval: number
   hourlyMinute: number
-  dailyTime: [number, number]
+  mainScheduleTime: [number, number]
   weeklyDay: number
-  weeklyTime: [number, number]
   monthlyDay: number
-  monthlyTime: [number, number]
   timezone: string
 } {
   // Extract schedule time (common field that can override others)
@@ -79,18 +77,16 @@ export function getScheduleTimeValues(starterBlock: BlockState): {
   const hourlyMinuteStr = getSubBlockValue(starterBlock, 'hourlyMinute')
   const hourlyMinute = Number.parseInt(hourlyMinuteStr) || 0
 
-  // Get daily time
-  const dailyTime = parseTimeString(getSubBlockValue(starterBlock, 'dailyTime'))
+  // Parse main schedule time (used for daily, weekly, monthly)
+  const mainScheduleTime = parseTimeString(scheduleTime)
 
   // Get weekly config
   const weeklyDayStr = getSubBlockValue(starterBlock, 'weeklyDay') || 'MON'
   const weeklyDay = DAY_MAP[weeklyDayStr] || 1
-  const weeklyTime = parseTimeString(getSubBlockValue(starterBlock, 'weeklyDayTime'))
 
   // Get monthly config
   const monthlyDayStr = getSubBlockValue(starterBlock, 'monthlyDay')
   const monthlyDay = Number.parseInt(monthlyDayStr) || 1
-  const monthlyTime = parseTimeString(getSubBlockValue(starterBlock, 'monthlyTime'))
 
   return {
     scheduleTime,
@@ -98,11 +94,9 @@ export function getScheduleTimeValues(starterBlock: BlockState): {
     timezone,
     minutesInterval,
     hourlyMinute,
-    dailyTime,
+    mainScheduleTime,
     weeklyDay,
-    weeklyTime,
     monthlyDay,
-    monthlyTime,
   }
 }
 
@@ -227,17 +221,17 @@ export function generateCronExpression(
       return `${scheduleValues.hourlyMinute} * * * *`
 
     case 'daily': {
-      const [hours, minutes] = scheduleValues.dailyTime
+      const [hours, minutes] = scheduleValues.mainScheduleTime
       return `${minutes} ${hours} * * *`
     }
 
     case 'weekly': {
-      const [hours, minutes] = scheduleValues.weeklyTime
+      const [hours, minutes] = scheduleValues.mainScheduleTime
       return `${minutes} ${hours} * * ${scheduleValues.weeklyDay}`
     }
 
     case 'monthly': {
-      const [hours, minutes] = scheduleValues.monthlyTime
+      const [hours, minutes] = scheduleValues.mainScheduleTime
       return `${minutes} ${hours} ${scheduleValues.monthlyDay} * *`
     }
 
@@ -416,8 +410,8 @@ export function calculateNextRunTime(
     }
 
     case 'daily': {
-      // Use either schedule override or daily time values
-      const [hours, minutes] = scheduleTimeOverride || scheduleValues.dailyTime
+      // Use either schedule override or main schedule time
+      const [hours, minutes] = scheduleTimeOverride || scheduleValues.mainScheduleTime
 
       nextRun.setHours(hours, minutes, 0, 0)
 
@@ -430,8 +424,8 @@ export function calculateNextRunTime(
     }
 
     case 'weekly': {
-      // Use either schedule override or weekly time values
-      const [hours, minutes] = scheduleTimeOverride || scheduleValues.weeklyTime
+      // Use either schedule override or main schedule time
+      const [hours, minutes] = scheduleTimeOverride || scheduleValues.mainScheduleTime
 
       nextRun.setHours(hours, minutes, 0, 0)
 
@@ -444,8 +438,8 @@ export function calculateNextRunTime(
     }
 
     case 'monthly': {
-      // Use either schedule override or monthly time values
-      const [hours, minutes] = scheduleTimeOverride || scheduleValues.monthlyTime
+      // Use either schedule override or main schedule time
+      const [hours, minutes] = scheduleTimeOverride || scheduleValues.mainScheduleTime
       const { monthlyDay } = scheduleValues
 
       nextRun.setDate(monthlyDay)

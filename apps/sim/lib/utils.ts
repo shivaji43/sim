@@ -89,12 +89,12 @@ export function convertScheduleOptionsToCron(
       return `${options.hourlyMinute || '00'} * * * *`
     }
     case 'daily': {
-      // Expected dailyTime in HH:MM
-      const [minute, hour] = (options.dailyTime || '00:09').split(':')
+      // Expected scheduleTime in HH:MM
+      const [minute, hour] = (options.scheduleTime || '09:00').split(':')
       return `${minute || '00'} ${hour || '09'} * * *`
     }
     case 'weekly': {
-      // Expected weeklyDay as MON, TUE, etc. and weeklyDayTime in HH:MM
+      // Expected weeklyDay as MON, TUE, etc. and use scheduleTime for time
       const dayMap: Record<string, number> = {
         MON: 1,
         TUE: 2,
@@ -105,13 +105,13 @@ export function convertScheduleOptionsToCron(
         SUN: 0,
       }
       const day = dayMap[options.weeklyDay || 'MON']
-      const [minute, hour] = (options.weeklyDayTime || '00:09').split(':')
+      const [minute, hour] = (options.scheduleTime || '09:00').split(':')
       return `${minute || '00'} ${hour || '09'} * * ${day}`
     }
     case 'monthly': {
-      // Expected monthlyDay and monthlyTime in HH:MM
+      // Expected monthlyDay and use scheduleTime for time
       const day = options.monthlyDay || '1'
-      const [minute, hour] = (options.monthlyTime || '00:09').split(':')
+      const [minute, hour] = (options.scheduleTime || '09:00').split(':')
       return `${minute || '00'} ${hour || '09'} ${day} * *`
     }
     case 'custom': {
@@ -143,6 +143,22 @@ export function getTimezoneAbbreviation(timezone: string, date: Date = new Date(
     'Asia/Tokyo': { standard: 'JST', daylight: 'JST' }, // Japan doesn't use DST
     'Australia/Sydney': { standard: 'AEST', daylight: 'AEDT' },
     'Asia/Singapore': { standard: 'SGT', daylight: 'SGT' }, // Singapore doesn't use DST
+    'Asia/Kolkata': { standard: 'IST', daylight: 'IST' }, // India doesn't use DST
+    'Europe/Berlin': { standard: 'CET', daylight: 'CEST' },
+    'Europe/Madrid': { standard: 'CET', daylight: 'CEST' },
+    'Europe/Rome': { standard: 'CET', daylight: 'CEST' },
+    'Europe/Moscow': { standard: 'MSK', daylight: 'MSK' }, // Russia doesn't use DST
+    'Asia/Shanghai': { standard: 'CST', daylight: 'CST' }, // China doesn't use DST
+    'Asia/Hong_Kong': { standard: 'HKT', daylight: 'HKT' }, // Hong Kong doesn't use DST
+    'Asia/Dubai': { standard: 'GST', daylight: 'GST' }, // UAE doesn't use DST
+    'Asia/Seoul': { standard: 'KST', daylight: 'KST' }, // South Korea doesn't use DST
+    'America/Sao_Paulo': { standard: 'BRT', daylight: 'BRST' },
+    'America/Mexico_City': { standard: 'CST', daylight: 'CDT' },
+    'America/Toronto': { standard: 'EST', daylight: 'EDT' },
+    'America/Vancouver': { standard: 'PST', daylight: 'PDT' },
+    'Africa/Cairo': { standard: 'EET', daylight: 'EEST' },
+    'Africa/Johannesburg': { standard: 'SAST', daylight: 'SAST' }, // South Africa doesn't use DST
+    'Australia/Melbourne': { standard: 'AEST', daylight: 'AEDT' },
   }
 
   // If we have a mapping for this timezone

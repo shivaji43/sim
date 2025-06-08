@@ -40,16 +40,16 @@ function hasValidScheduleConfig(
     case 'hourly':
       return scheduleValues.hourlyMinute !== undefined
     case 'daily':
-      return !!scheduleValues.dailyTime[0] || !!scheduleValues.dailyTime[1]
+      return !!scheduleValues.mainScheduleTime[0] || !!scheduleValues.mainScheduleTime[1]
     case 'weekly':
       return (
         !!scheduleValues.weeklyDay &&
-        (!!scheduleValues.weeklyTime[0] || !!scheduleValues.weeklyTime[1])
+        (!!scheduleValues.mainScheduleTime[0] || !!scheduleValues.mainScheduleTime[1])
       )
     case 'monthly':
       return (
         !!scheduleValues.monthlyDay &&
-        (!!scheduleValues.monthlyTime[0] || !!scheduleValues.monthlyTime[1])
+        (!!scheduleValues.mainScheduleTime[0] || !!scheduleValues.mainScheduleTime[1])
       )
     case 'custom':
       return !!getSubBlockValue(starterBlock, 'cronExpression')

@@ -58,11 +58,8 @@ export function ScheduleModal({
   const [scheduleTime, setScheduleTime] = useSubBlockValue(blockId, 'scheduleTime')
   const [minutesInterval, setMinutesInterval] = useSubBlockValue(blockId, 'minutesInterval')
   const [hourlyMinute, setHourlyMinute] = useSubBlockValue(blockId, 'hourlyMinute')
-  const [dailyTime, setDailyTime] = useSubBlockValue(blockId, 'dailyTime')
   const [weeklyDay, setWeeklyDay] = useSubBlockValue(blockId, 'weeklyDay')
-  const [weeklyDayTime, setWeeklyDayTime] = useSubBlockValue(blockId, 'weeklyDayTime')
   const [monthlyDay, setMonthlyDay] = useSubBlockValue(blockId, 'monthlyDay')
-  const [monthlyTime, setMonthlyTime] = useSubBlockValue(blockId, 'monthlyTime')
   const [cronExpression, setCronExpression] = useSubBlockValue(blockId, 'cronExpression')
   const [timezone, setTimezone] = useSubBlockValue(blockId, 'timezone')
 
@@ -90,11 +87,8 @@ export function ScheduleModal({
         scheduleTime: scheduleTime || '',
         minutesInterval: minutesInterval || '',
         hourlyMinute: hourlyMinute || '',
-        dailyTime: dailyTime || '',
         weeklyDay: weeklyDay || 'MON',
-        weeklyDayTime: weeklyDayTime || '',
         monthlyDay: monthlyDay || '',
-        monthlyTime: monthlyTime || '',
         timezone: timezone || 'UTC',
         cronExpression: cronExpression || '',
       }
@@ -115,11 +109,8 @@ export function ScheduleModal({
       scheduleTime: scheduleTime || '',
       minutesInterval: minutesInterval || '',
       hourlyMinute: hourlyMinute || '',
-      dailyTime: dailyTime || '',
       weeklyDay: weeklyDay || 'MON',
-      weeklyDayTime: weeklyDayTime || '',
       monthlyDay: monthlyDay || '',
-      monthlyTime: monthlyTime || '',
       timezone: timezone || 'UTC',
       cronExpression: cronExpression || '',
     }
@@ -139,13 +130,13 @@ export function ScheduleModal({
           hasRequiredFields = currentValues.hourlyMinute !== ''
           break
         case 'daily':
-          hasRequiredFields = !!currentValues.dailyTime
+          hasRequiredFields = true
           break
         case 'weekly':
-          hasRequiredFields = !!currentValues.weeklyDay && !!currentValues.weeklyDayTime
+          hasRequiredFields = !!currentValues.weeklyDay
           break
         case 'monthly':
-          hasRequiredFields = !!currentValues.monthlyDay && !!currentValues.monthlyTime
+          hasRequiredFields = !!currentValues.monthlyDay
           break
         case 'custom':
           hasRequiredFields = !!currentValues.cronExpression
@@ -164,11 +155,8 @@ export function ScheduleModal({
     scheduleTime,
     minutesInterval,
     hourlyMinute,
-    dailyTime,
     weeklyDay,
-    weeklyDayTime,
     monthlyDay,
-    monthlyTime,
     timezone,
     cronExpression,
     initialValues,
@@ -192,11 +180,8 @@ export function ScheduleModal({
       setScheduleTime(initialValues.scheduleTime)
       setMinutesInterval(initialValues.minutesInterval)
       setHourlyMinute(initialValues.hourlyMinute)
-      setDailyTime(initialValues.dailyTime)
       setWeeklyDay(initialValues.weeklyDay)
-      setWeeklyDayTime(initialValues.weeklyDayTime)
       setMonthlyDay(initialValues.monthlyDay)
-      setMonthlyTime(initialValues.monthlyTime)
       setTimezone(initialValues.timezone)
       setCronExpression(initialValues.cronExpression)
     }
@@ -225,24 +210,6 @@ export function ScheduleModal({
 
       if (scheduleType === 'hourly' && hourlyMinute === '') {
         setErrorMessage('Please enter minute of the hour')
-        setIsSaving(false)
-        return
-      }
-
-      if (scheduleType === 'daily' && !dailyTime) {
-        setErrorMessage('Please enter time of day')
-        setIsSaving(false)
-        return
-      }
-
-      if (scheduleType === 'weekly' && !weeklyDayTime) {
-        setErrorMessage('Please enter time of day')
-        setIsSaving(false)
-        return
-      }
-
-      if (scheduleType === 'monthly' && (!monthlyDay || !monthlyTime)) {
-        setErrorMessage('Please enter day of month and time')
         setIsSaving(false)
         return
       }
@@ -283,11 +250,8 @@ export function ScheduleModal({
           scheduleTime: scheduleTime || '',
           minutesInterval: minutesInterval || '',
           hourlyMinute: hourlyMinute || '',
-          dailyTime: dailyTime || '',
           weeklyDay: weeklyDay || 'MON',
-          weeklyDayTime: weeklyDayTime || '',
           monthlyDay: monthlyDay || '',
-          monthlyTime: monthlyTime || '',
           timezone: timezone || 'UTC',
           cronExpression: cronExpression || '',
         }
@@ -462,21 +426,6 @@ export function ScheduleModal({
               </div>
             )}
 
-            {/* Daily schedule options */}
-            {scheduleType === 'daily' && (
-              <div className='space-y-1'>
-                <label htmlFor='dailyTime' className='font-medium text-sm'>
-                  Time of Day
-                </label>
-                <TimeInput
-                  blockId={blockId}
-                  subBlockId='dailyTime'
-                  placeholder='Select time'
-                  className='h-10'
-                />
-              </div>
-            )}
-
             {/* Weekly schedule options */}
             {scheduleType === 'weekly' && (
               <div className='space-y-4'>
@@ -498,18 +447,6 @@ export function ScheduleModal({
                       <SelectItem value='SUN'>Sunday</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-
-                <div className='space-y-1'>
-                  <label htmlFor='weeklyDayTime' className='font-medium text-sm'>
-                    Time of Day
-                  </label>
-                  <TimeInput
-                    blockId={blockId}
-                    subBlockId='weeklyDayTime'
-                    placeholder='Select time'
-                    className='h-10'
-                  />
                 </div>
               </div>
             )}
@@ -534,18 +471,6 @@ export function ScheduleModal({
                   <p className='text-muted-foreground text-xs'>
                     Specify which day of the month the workflow should run (1-31)
                   </p>
-                </div>
-
-                <div className='space-y-1'>
-                  <label htmlFor='monthlyTime' className='font-medium text-sm'>
-                    Time of Day
-                  </label>
-                  <TimeInput
-                    blockId={blockId}
-                    subBlockId='monthlyTime'
-                    placeholder='Select time'
-                    className='h-10'
-                  />
                 </div>
               </div>
             )}
@@ -584,11 +509,27 @@ export function ScheduleModal({
                   <SelectItem value='America/Chicago'>US Central (UTC-5)</SelectItem>
                   <SelectItem value='America/Denver'>US Mountain (UTC-6)</SelectItem>
                   <SelectItem value='America/Los_Angeles'>US Pacific (UTC-7)</SelectItem>
+                  <SelectItem value='America/Toronto'>Toronto (UTC-4)</SelectItem>
+                  <SelectItem value='America/Vancouver'>Vancouver (UTC-7)</SelectItem>
+                  <SelectItem value='America/Mexico_City'>Mexico City (UTC-5)</SelectItem>
+                  <SelectItem value='America/Sao_Paulo'>São Paulo (UTC-3)</SelectItem>
                   <SelectItem value='Europe/London'>London (UTC+1)</SelectItem>
                   <SelectItem value='Europe/Paris'>Paris (UTC+2)</SelectItem>
+                  <SelectItem value='Europe/Berlin'>Berlin (UTC+2)</SelectItem>
+                  <SelectItem value='Europe/Madrid'>Madrid (UTC+2)</SelectItem>
+                  <SelectItem value='Europe/Rome'>Rome (UTC+2)</SelectItem>
+                  <SelectItem value='Europe/Moscow'>Moscow (UTC+3)</SelectItem>
+                  <SelectItem value='Asia/Dubai'>Dubai (UTC+4)</SelectItem>
+                  <SelectItem value='Asia/Kolkata'>Mumbai (UTC+5:30)</SelectItem>
+                  <SelectItem value='Asia/Shanghai'>Shanghai (UTC+8)</SelectItem>
+                  <SelectItem value='Asia/Hong_Kong'>Hong Kong (UTC+8)</SelectItem>
                   <SelectItem value='Asia/Singapore'>Singapore (UTC+8)</SelectItem>
+                  <SelectItem value='Asia/Seoul'>Seoul (UTC+9)</SelectItem>
                   <SelectItem value='Asia/Tokyo'>Tokyo (UTC+9)</SelectItem>
                   <SelectItem value='Australia/Sydney'>Sydney (UTC+10)</SelectItem>
+                  <SelectItem value='Australia/Melbourne'>Melbourne (UTC+10)</SelectItem>
+                  <SelectItem value='Africa/Cairo'>Cairo (UTC+2)</SelectItem>
+                  <SelectItem value='Africa/Johannesburg'>Johannesburg (UTC+2)</SelectItem>
                 </SelectContent>
               </Select>
             </div>

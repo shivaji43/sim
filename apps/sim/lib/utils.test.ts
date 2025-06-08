@@ -122,14 +122,14 @@ describe('convertScheduleOptionsToCron', () => {
   })
 
   it('should convert daily schedule to cron', () => {
-    const result = convertScheduleOptionsToCron('daily', { dailyTime: '15:30' })
+    const result = convertScheduleOptionsToCron('daily', { scheduleTime: '15:30' })
     expect(result).toBe('15 30 * * *')
   })
 
   it('should convert weekly schedule to cron', () => {
     const result = convertScheduleOptionsToCron('weekly', {
       weeklyDay: 'MON',
-      weeklyDayTime: '09:30',
+      scheduleTime: '09:30',
     })
     expect(result).toBe('09 30 * * 1')
   })
@@ -137,7 +137,7 @@ describe('convertScheduleOptionsToCron', () => {
   it('should convert monthly schedule to cron', () => {
     const result = convertScheduleOptionsToCron('monthly', {
       monthlyDay: '15',
-      monthlyTime: '12:00',
+      scheduleTime: '12:00',
     })
     expect(result).toBe('12 00 15 * *')
   })

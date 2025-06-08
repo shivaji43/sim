@@ -750,31 +750,6 @@ export const useWorkflowRegistry = create<WorkflowRegistry>()(
                 type: 'short-input' as const,
                 value: '',
               },
-              dailyTime: {
-                id: 'dailyTime',
-                type: 'short-input' as const,
-                value: '',
-              },
-              weeklyDay: {
-                id: 'weeklyDay',
-                type: 'dropdown' as const,
-                value: 'MON',
-              },
-              weeklyDayTime: {
-                id: 'weeklyDayTime',
-                type: 'short-input' as const,
-                value: '',
-              },
-              monthlyDay: {
-                id: 'monthlyDay',
-                type: 'short-input' as const,
-                value: '',
-              },
-              monthlyTime: {
-                id: 'monthlyTime',
-                type: 'short-input' as const,
-                value: '',
-              },
               cronExpression: {
                 id: 'cronExpression',
                 type: 'short-input' as const,
@@ -822,7 +797,7 @@ export const useWorkflowRegistry = create<WorkflowRegistry>()(
                   parallels: {},
                   isDeployed: false,
                   deployedAt: undefined,
-                  workspaceId, // Include workspace ID in history
+                  workspaceId, // Include workspace ID in history state
                 },
                 timestamp: Date.now(),
                 action: 'Initial state',
